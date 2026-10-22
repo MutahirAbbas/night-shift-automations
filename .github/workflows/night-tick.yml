@@ -1,0 +1,48 @@
+name: Night tick
+
+# Every 15 minutes, run Night Shift's server automations (a Base44 backend function):
+#  - close shifts that ended and draft the handoff note with AI
+#  - email handoff notes at 9:00 AM in the team's city
+#  - clock out members who went quiet for 2 hours
+#  - Friday 9:00 AM Dubai: email each member their week
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      force_recap:
+        description: "Send the Friday recap now (testing)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: night-tick
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Run the night tick
+        env:
+          NIGHT_TICK_KEY: ${{ secrets.NIGHT_TICK_KEY }}
+          APP_ID: 6ad95d3fb2331990f5ab0c86
+          FORCE_RECAP: ${{ inputs.force_recap || false }}
+        run: |
+          body='{}'
+          if [ "$FORCE_RECAP" = "true" ]; then body='{"force_recap":true}'; fi
+          for base in "https://night-shift-f5ab0c86.base44.app" "https://base44.app"; do
+            code=$(curl -sS -o out.json -w '%{http_code}' -X POST \
+              "$base/api/apps/$APP_ID/functions/nightTick" \
+              -H "Content-Type: application/json" \
+              -H "X-App-Id: $APP_ID" \
+              -H "x-night-key: $NIGHT_TICK_KEY" \
+              -d "$body" || echo 000)
+            echo "$base → HTTP $code"
+            if [ "$code" = "200" ]; then break; fi
+          done
+          cat out.json; echo
+          [ "$code" = "200" ] || exit 1
+          summary=$(jq -r '.summary // .skipped // "ran"' out.json)
+          echo "### 🌙 $summary" >> "$GITHUB_STEP_SUMMARY"
