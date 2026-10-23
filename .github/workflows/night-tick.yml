@@ -7,7 +7,7 @@ name: Night tick
 #  - Friday 9:00 AM Dubai: email each member their week
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "7,22,37,52 * * * *"
   workflow_dispatch:
     inputs:
       force_recap:
